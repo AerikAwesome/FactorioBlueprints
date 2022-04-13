@@ -2,56 +2,77 @@
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
+using Blueprint.Models;
 
-namespace Blueprint.Parser
+namespace Blueprint.Parser;
+
+public class BlueprintParser
 {
-    public class BlueprintParser
+    private readonly ILogger<BlueprintParser> _logger;
+
+    public BlueprintParser(ILogger<BlueprintParser> logger)
     {
-        private ILogger<BlueprintParser> _logger;
+        _logger = logger;
+    }
 
-        public BlueprintParser(ILogger<BlueprintParser> logger)
+    public bool TryParseAsBlueprint(JsonDocument jsonBlueprint, out Models.Blueprint? blueprint)
+    {
+        if (BlueprintIsBook(jsonBlueprint))
         {
-            _logger = logger;
+            blueprint = null;
+            return false;
         }
 
-        public bool TryParseAsBlueprint(JsonDocument jsonBlueprint, out Models.Blueprint? blueprint)
+        try
         {
-            if (BlueprintIsBook(jsonBlueprint))
-            {
-                blueprint = null;
-                return false;
-            }
+            blueprint = jsonBlueprint.Deserialize<Models.Blueprint>();
+            return true;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse blueprint string");
+            blueprint = null;
+            return false;
+        }
+    }
 
-            try
-            {
-                blueprint = jsonBlueprint.Deserialize<Models.Blueprint>();
-                return true;
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogError(ex, "Failed to parse blueprint string");
-                blueprint = null;
-                return false;
-            }
+    public bool TryParseAsBlueprintBook(JsonDocument jsonBlueprint, out BlueprintBook? blueprintBook)
+    {
+        if (!BlueprintIsBook(jsonBlueprint))
+        {
+            blueprintBook = null;
+            return false;
         }
 
-        private bool BlueprintIsBook(JsonDocument document)
+        try
         {
-            return document.RootElement.TryGetProperty("blueprint-book", out _);
+            blueprintBook = jsonBlueprint.Deserialize<Models.BlueprintBook>();
+            return true;
         }
-
-        public JsonDocument DecodeString(string blueprintString)
+        catch (JsonException ex)
         {
-            var bytes = Convert.FromBase64String(blueprintString.Substring(1));
+            _logger.LogError(ex, "Failed to parse blueprint string");
+            blueprintBook = null;
+            return false;
+        }
+    }
 
-            using (var ms = new MemoryStream(bytes))
+    private bool BlueprintIsBook(JsonDocument document)
+    {
+        return document.RootElement.TryGetProperty("blueprint-book", out _);
+    }
+
+    public JsonDocument DecodeString(string blueprintString)
+    {
+        var bytes = Convert.FromBase64String(blueprintString.Substring(1));
+
+        using (var ms = new MemoryStream(bytes))
+        {
+            using (var compressed = new ZLibStream(ms, CompressionMode.Decompress))
             {
-                using (var compressed = new ZLibStream(ms, CompressionMode.Decompress))
-                {
-                    var result = JsonDocument.Parse(compressed);
+                var result = JsonDocument.Parse(compressed);
 
-                    return result;
-                }
+                return result;
             }
         }
     }
