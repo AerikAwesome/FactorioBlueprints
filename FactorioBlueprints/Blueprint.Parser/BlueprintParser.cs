@@ -3,63 +3,35 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using Blueprint.Models;
+using System.Text.Json.Serialization;
 
 namespace Blueprint.Parser;
 
 public class BlueprintParser
 {
     private readonly ILogger<BlueprintParser> _logger;
+    private static readonly JsonSerializerOptions jsonSerializerOptions = new JsonSerializerOptions{
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)},
+        PropertyNameCaseInsensitive = true};
 
     public BlueprintParser(ILogger<BlueprintParser> logger)
     {
         _logger = logger;
     }
 
-    public bool TryParseAsBlueprint(JsonDocument jsonBlueprint, out Models.Blueprint? blueprint)
+    public bool TryParse(JsonDocument jsonBlueprint, out Models.Container? result)
     {
-        if (BlueprintIsBook(jsonBlueprint))
-        {
-            blueprint = null;
-            return false;
-        }
-
         try
         {
-            blueprint = jsonBlueprint.Deserialize<Models.Blueprint>();
+            result = jsonBlueprint.Deserialize<Models.Container>(jsonSerializerOptions);
             return true;
         }
         catch (JsonException ex)
         {
             _logger.LogError(ex, "Failed to parse blueprint string");
-            blueprint = null;
+            result = null;
             return false;
         }
-    }
-
-    public bool TryParseAsBlueprintBook(JsonDocument jsonBlueprint, out BlueprintBook? blueprintBook)
-    {
-        if (!BlueprintIsBook(jsonBlueprint))
-        {
-            blueprintBook = null;
-            return false;
-        }
-
-        try
-        {
-            blueprintBook = jsonBlueprint.Deserialize<Models.BlueprintBook>();
-            return true;
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, "Failed to parse blueprint string");
-            blueprintBook = null;
-            return false;
-        }
-    }
-
-    private bool BlueprintIsBook(JsonDocument document)
-    {
-        return document.RootElement.TryGetProperty("blueprint-book", out _);
     }
 
     public JsonDocument DecodeString(string blueprintString)
